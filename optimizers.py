@@ -322,3 +322,33 @@ class Adafactor(Optimizer):
 
         p.addcdiv_(grad, v_hat.sqrt().add_(group["eps"]), value=-group["lr"])
 
+
+class FullMatrixAdaGrad(Optimizer):
+    """
+    Implements Full-Matrix AdaGrad algorithm
+    """
+
+    raise NotImplementedError("FullMatrixAdaGrad is not implemented yet.")
+
+
+class Shampoo(Optimizer):
+    """
+    Implements Shampoo algorithm
+    """
+
+    raise NotImplementedError("Shampoo is not implemented yet.")
+
+
+class Muon(Optimizer):
+    """
+    Implements Muon algorithm
+    """
+
+    raise NotImplementedError("Muon is not implemented yet.")
+
+class unScion(Optimizer):
+    """
+    Implements unScion algorithm
+    """
+
+    raise NotImplementedError("unScion is not implemented yet.")
