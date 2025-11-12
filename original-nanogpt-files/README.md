@@ -12,7 +12,7 @@ Because the code is so simple, it is very easy to hack to your needs, train new 
 ## install
 
 ```
-pip install torch numpy transformers datasets tiktoken wandb tqdm einops
+pip install torch numpy transformers datasets tiktoken wandb tqdm
 ```
 
 Dependencies:
@@ -24,7 +24,6 @@ Dependencies:
 -  `tiktoken` for OpenAI's fast BPE code <3
 -  `wandb` for optional logging <3
 -  `tqdm` for progress bars <3
-- `einops` for multi-dimensional array operations
 
 ## quick start
 

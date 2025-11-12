@@ -10,7 +10,6 @@ https://github.com/huggingface/transformers/blob/main/src/transformers/models/gp
 import math
 import inspect
 from dataclasses import dataclass
-from einops import einsum, rearrange
 
 import torch
 import torch.nn as nn
@@ -28,9 +27,6 @@ class LayerNorm(nn.Module):
         return F.layer_norm(input, self.weight.shape, self.weight, self.bias, 1e-5)
 
 class CausalSelfAttention(nn.Module):
-    """
-    nanoGPT implementation of multi-head attention
-    """
 
     def __init__(self, config):
         super().__init__()
@@ -46,8 +42,7 @@ class CausalSelfAttention(nn.Module):
         self.n_embd = config.n_embd
         self.dropout = config.dropout
         # flash attention make GPU go brrrrr but support is only in PyTorch >= 2.0
-        # self.flash = hasattr(torch.nn.functional, 'scaled_dot_product_attention')
-        self.flash = False
+        self.flash = hasattr(torch.nn.functional, 'scaled_dot_product_attention')
         if not self.flash:
             print("WARNING: using slow attention. Flash Attention requires PyTorch >= 2.0")
             # causal mask to ensure that attention is only applied to the left in the input sequence
@@ -70,7 +65,7 @@ class CausalSelfAttention(nn.Module):
         else:
             # manual implementation of attention
             att = (q @ k.transpose(-2, -1)) * (1.0 / math.sqrt(k.size(-1)))
-            att = att.masked_fill(self.bias[:,:,:T,:T] == 0, float('-inf')) # type: ignore
+            att = att.masked_fill(self.bias[:,:,:T,:T] == 0, float('-inf'))
             att = F.softmax(att, dim=-1)
             att = self.attn_dropout(att)
             y = att @ v # (B, nh, T, T) x (B, nh, T, hs) -> (B, nh, T, hs)
@@ -79,70 +74,6 @@ class CausalSelfAttention(nn.Module):
         # output projection
         y = self.resid_dropout(self.c_proj(y))
         return y
-
-class CausalSelfAttentionGQA(nn.Module):
-    """
-        Grouped Query Attention (GQA)
-    """
-    def __init__(self, config):
-        super().__init__()
-        assert config.n_embd % config.n_head == 0  # each head handles n_embd / n_head features
-        assert config.n_head % config.n_headgroup == 0  # each group has n_headgroup heads
-        
-        self.n_head = config.n_head
-        self.n_headgroup = config.n_headgroup
-        self.n_group = self.n_head // self.n_headgroup
-        self.n_embd = config.n_embd
-        self.head_dim = config.n_embd // config.n_head  # dimension per head
-
-        self.attn_dropout = nn.Dropout(config.dropout)
-        self.resid_dropout = nn.Dropout(config.dropout)
-        self.dropout = config.dropout
-
-        self.flash = False
-        if not self.flash:
-            print("WARNING: using slow attention. Flash Attention requires PyTorch >= 2.0")
-            # causal mask to ensure that attention is only applied to the left in the input sequence
-            self.register_buffer("bias", torch.tril(torch.ones(config.block_size, config.block_size))
-                                        .view(1, 1, config.block_size, config.block_size))
-        
-        self.q_attn = nn.Linear(config.n_embd, self.n_embd, bias=config.bias)
-        self.kv_attn = nn.Linear(config.n_embd, 2 * self.n_group * self.head_dim, bias=config.bias)
-
-        self.c_proj = nn.Linear(config.n_embd, config.n_embd, bias=config.bias)
-    
-    def forward(self, x):
-        B, T, C = x.size()  # batch size, seq length, embedding dim (n_embd)
-        
-        # calculate query, key, values
-        q = self.q_attn(x)
-        k, v = self.kv_attn(x).split(self.n_group * self.head_dim, dim=2)
-
-        # reshape q, k, v
-        q = rearrange(q, 'b t (h d) -> b h t d', h=self.n_head) # (batch, n_head, seq_len, head_dim)
-        k = rearrange(k, 'b t (hg d) -> b hg t d', hg=self.n_group) # (batch, n_group, seq_len, head_dim)
-        v = rearrange(v, 'b t (hg d) -> b hg t d', hg=self.n_group) # (batch, n_group, seq_len, head_dim)
-
-        # split heads of query into headgrouops
-        q = rearrange(q, 'b (g s) t d -> b g s t d', g=self.n_group) # (batch, n_group, n_head_per_group, seq_len, head_dim)
-
-        if self.flash:
-            raise NotImplementedError("Flash attention not implemented for GQA")
-        else:
-            att = einsum(q, k, 'b g s t d, b g c d -> b g s t c')
-            att = att * (1.0 / math.sqrt(self.head_dim))
-            mask = self.bias[:, :, :T, :T]  # type: ignore # (1, 1, T, T)
-            att = att.masked_fill(mask[:, :, None, :, :] == 0, float('-inf'))
-            att = F.softmax(att, dim=-1)
-            att = self.attn_dropout(att)
-            y = einsum(att, v, 'b g s t c, b g c d -> b g s t d')
-            y = rearrange(y, 'b g s t d -> b (g s) t d')
-
-        y = rearrange(y, 'b h t d -> b t (h d)') # re-assemble all head outputs side by side
-        y = self.resid_dropout(self.c_proj(y))
-        return y
-
-
 
 class MLP(nn.Module):
 
@@ -165,16 +96,7 @@ class Block(nn.Module):
     def __init__(self, config):
         super().__init__()
         self.ln_1 = LayerNorm(config.n_embd, bias=config.bias)
-        assert config.n_headgroup <= config.n_head, "n_headgroup must be <= n_head"
-        assert config.n_head % config.n_headgroup == 0, "n_head must be divisible by n_headgroup"
-        if config.n_headgroup > 1:
-            print("Using GQA with n_headgroup =", config.n_headgroup)
-            self.attn = CausalSelfAttentionGQA(config)
-        elif config.n_headgroup == 1:
-            print("Using MHA")
-            self.attn = CausalSelfAttention(config)
-        else:
-            raise ValueError("n_headgroup must be an integer >= 1")
+        self.attn = CausalSelfAttention(config)
         self.ln_2 = LayerNorm(config.n_embd, bias=config.bias)
         self.mlp = MLP(config)
 
@@ -189,10 +111,9 @@ class GPTConfig:
     vocab_size: int = 50304 # GPT-2 vocab_size of 50257, padded up to nearest multiple of 64 for efficiency
     n_layer: int = 12
     n_head: int = 12
-    n_headgroup: int = 3
     n_embd: int = 768
     dropout: float = 0.0
-    bias: bool = False # True: bias in Linears and LayerNorms, like GPT-2. False: a bit better and faster
+    bias: bool = True # True: bias in Linears and LayerNorms, like GPT-2. False: a bit better and faster
 
 class GPT(nn.Module):
 

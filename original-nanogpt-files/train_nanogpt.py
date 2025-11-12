@@ -24,12 +24,10 @@ from contextlib import nullcontext
 
 import numpy as np
 import torch
-import torch.nn as nn
 from torch.nn.parallel import DistributedDataParallel as DDP
 from torch.distributed import init_process_group, destroy_process_group
 
 from model import GPTConfig, GPT
-import optimizers
 
 # -----------------------------------------------------------------------------
 # default config values designed to train a gpt2 (124M) on OpenWebText
@@ -56,30 +54,24 @@ n_head = 12
 n_embd = 768
 dropout = 0.0 # for pretraining 0 is good, for finetuning try 0.1+
 bias = False # do we use bias inside LayerNorm and Linear layers?
-# optimizer parameters
-learning_rate = 1e-3 # max learning rate
+# adamw optimizer
+learning_rate = 6e-4 # max learning rate
 max_iters = 600000 # total number of training iterations
 weight_decay = 1e-1
 beta1 = 0.9
-beta2 = 0.999
-eps = 1e-6
+beta2 = 0.95
 grad_clip = 1.0 # clip gradients at this value, or disable if == 0.0
 # learning rate decay settings
 decay_lr = True # whether to decay the learning rate
 warmup_iters = 2000 # how many steps to warm up for
 lr_decay_iters = 600000 # should be ~= max_iters per Chinchilla
-min_lr = 1e-4 # minimum learning rate, should be ~= learning_rate/10 per Chinchilla
+min_lr = 6e-5 # minimum learning rate, should be ~= learning_rate/10 per Chinchilla
 # DDP settings
 backend = 'nccl' # 'nccl', 'gloo', etc.
 # system
 device = 'cuda' # examples: 'cpu', 'cuda', 'cuda:0', 'cuda:1' etc., or try 'mps' on macbooks
 dtype = 'bfloat16' if torch.cuda.is_available() and torch.cuda.is_bf16_supported() else 'float16' # 'float32', 'bfloat16', or 'float16', the latter will auto implement a GradScaler
 compile = True # use PyTorch 2.0 to compile the model to be faster
-# -----------------------------------------------------------------------------
-# flags for the algorithmic extensions
-attention_variant = 'mha' # options: mha (multi-head attention implemented in nanoGPT), gqa (grouped-query attention)
-n_headgroup = 1 # number of heads per group if using grouped-query attention
-optimizer_variant = 'adamw' # options: adamw (optimizer used in nanoGPT), adam (implemented in optimizers.py), adafactor, adamsn
 # -----------------------------------------------------------------------------
 config_keys = [k for k,v in globals().items() if not k.startswith('_') and isinstance(v, (int, float, bool, str))]
 exec(open('configurator.py').read()) # overrides from command line or config file
@@ -152,9 +144,8 @@ if os.path.exists(meta_path):
     print(f"found vocab_size = {meta_vocab_size} (inside {meta_path})")
 
 # model init
-model_args = dict(n_layer=n_layer, n_head=n_head, n_headgroup=n_headgroup, n_embd=n_embd, block_size=block_size,
-                    bias=False, vocab_size=None, dropout=dropout) # start with model_args from command line
-
+model_args = dict(n_layer=n_layer, n_head=n_head, n_embd=n_embd, block_size=block_size,
+                  bias=bias, vocab_size=None, dropout=dropout) # start with model_args from command line
 if init_from == 'scratch':
     # init a new model from scratch
     print("Initializing a new model from scratch")
@@ -162,7 +153,7 @@ if init_from == 'scratch':
     if meta_vocab_size is None:
         print("defaulting to vocab_size of GPT-2 to 50304 (50257 rounded up for efficiency)")
     model_args['vocab_size'] = meta_vocab_size if meta_vocab_size is not None else 50304
-    gptconf = GPTConfig(**model_args) # type: ignore
+    gptconf = GPTConfig(**model_args)
     model = GPT(gptconf)
 elif init_from == 'resume':
     print(f"Resuming training from {out_dir}")
@@ -172,7 +163,7 @@ elif init_from == 'resume':
     checkpoint_model_args = checkpoint['model_args']
     # force these config attributes to be equal otherwise we can't even resume training
     # the rest of the attributes (e.g. dropout) can stay as desired from command line
-    for k in ['n_layer', 'n_head', 'n_headgroup', 'n_embd', 'block_size', 'bias', 'vocab_size']:
+    for k in ['n_layer', 'n_head', 'n_embd', 'block_size', 'bias', 'vocab_size']:
         model_args[k] = checkpoint_model_args[k]
     # create the model
     gptconf = GPTConfig(**model_args)
@@ -205,34 +196,7 @@ model.to(device)
 scaler = torch.cuda.amp.GradScaler(enabled=(dtype == 'float16'))
 
 # optimizer
-print("optimizer_variant = ", optimizer_variant)
-
-if optimizer_variant == 'adamw':
-    optimizer = model.configure_optimizers(weight_decay, learning_rate, (beta1, beta2), device_type)
-elif optimizer_variant == 'adam':
-    optimizer = optimizers.Adam(model.parameters(), learning_rate, betas=(beta1, beta2))
-elif optimizer_variant == 'adafactor':
-    # group parameters into linear module weight matrices and everything else
-    linear_modules = [module.weight for module in model.modules() if isinstance(module, nn.Linear)]
-    regular_params = [p for p in model.parameters() if id(p) not in [id(p) for p in linear_modules]]
-    param_groups = [
-        {'params': regular_params, 'param_type': 'regular'},  # use the Adam update 
-        {'params': linear_modules, 'param_type': 'linear'} # use the Adafactor update 
-    ]
-    optimizer = optimizers.Adafactor(param_groups, learning_rate, betas=(beta1, beta2))
-elif optimizer_variant == 'adamsn':
-    # group parameters into linear module weight matrices and everything else
-    linear_modules = [module.weight for module in model.modules() if isinstance(module, nn.Linear)]
-    regular_params = [p for p in model.parameters() if id(p) not in [id(p) for p in linear_modules]]
-    param_groups = [
-        {'params': regular_params, 'param_type': 'regular'},  # use regular Adam update
-        {'params': linear_modules, 'param_type': 'linear'} # use Adam with subset norm step sizes for each row
-    ]
-    optimizer = optimizers.AdamSN(param_groups, learning_rate, betas=(beta1, beta2))
-else:
-    raise ValueError(f"Unknown optimizer_variant {optimizer_variant}")
-
-
+optimizer = model.configure_optimizers(weight_decay, learning_rate, (beta1, beta2), device_type)
 if init_from == 'resume':
     optimizer.load_state_dict(checkpoint['optimizer'])
 checkpoint = None # free up memory
@@ -294,7 +258,6 @@ while True:
     lr = get_lr(iter_num) if decay_lr else learning_rate
     for param_group in optimizer.param_groups:
         param_group['lr'] = lr
-        
 
     # evaluate the loss on train/val sets and write checkpoints
     if iter_num % eval_interval == 0 and master_process:
