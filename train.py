@@ -229,6 +229,16 @@ elif optimizer_variant == 'adamsn':
         {'params': linear_modules, 'param_type': 'linear'} # use Adam with subset norm step sizes for each row
     ]
     optimizer = optimizers.AdamSN(param_groups, learning_rate, betas=(beta1, beta2))
+elif optimizer_variant == 'muon':
+    # group parameters into linear module weight matrices and everything else
+    linear_modules = [module.weight for module in model.modules() if isinstance(module, nn.Linear)]
+    regular_params = [p for p in model.parameters() if id(p) not in [id(p) for p in linear_modules]]
+    param_groups = [
+        {'params': regular_params, 'param_type': 'regular'},  # use regular Adam update
+        {'params': linear_modules, 'param_type': 'linear'} # use Muon update 
+    ]
+    optimizer = optimizers.Muon(param_groups, learning_rate)
+
 else:
     raise ValueError(f"Unknown optimizer_variant {optimizer_variant}")
 
