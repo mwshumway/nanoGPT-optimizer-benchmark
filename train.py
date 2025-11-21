@@ -31,6 +31,13 @@ from torch.distributed import init_process_group, destroy_process_group
 from model import GPTConfig, GPT
 import optimizers
 
+import sys
+print(f"Python executable: {sys.executable}")
+print(f"Python version: {sys.version}")
+print(f"PyTorch version: {torch.__version__}")
+print(f"PyTorch location: {torch.__file__}")
+print(f"MPS available: {torch.mps.is_available()}")
+
 # -----------------------------------------------------------------------------
 # default config values designed to train a gpt2 (124M) on OpenWebText
 # I/O

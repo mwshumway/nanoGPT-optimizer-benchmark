@@ -1,7 +1,7 @@
 
-python train.py config/train_shakespeare_char.py \
+python3.10 train.py config/train_shakespeare_char.py \
 --optimizer_variant=muon \
---device=mps \
+--device='mps' \
 --compile=False \
 --eval_iters=20 \
 --log_interval=1 \
