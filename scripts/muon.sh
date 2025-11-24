@@ -13,3 +13,5 @@ python3.10 train.py config/train_shakespeare_char.py \
 --max_iters=2000 \
 --lr_decay_iters=2000 \
 --dropout=0.0
+
+# train loss 1.1326, val loss 1.5803
