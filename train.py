@@ -249,48 +249,27 @@ elif optimizer_variant == 'muon':
     optimizer = optimizers.Muon(param_groups, learning_rate)
 elif optimizer_variant == "scion":
     first_layer = 'ColNorm'
-    mid_layers = 'Spectral'
+    mid_layer = 'Spectral'
     last_layer = 'Sign'
-    param_groups = []
-    from itertools import chain
-    first_params = chain(
-        model.transformer.wte.parameters(), # type: ignore
-        model.transformer.wpe.parameters() # type: ignore
-    )
-    param_groups.append(
-        {
-            'params': first_params,
-            'norm': first_layer,
-            'norm_kwargs': {'normalized': False},
-            'scale': 1.0,
-        },
-    )
-    param_groups.append(
-        {
-            'params': model.transformer.h.parameters(), # type: ignore
-            'norm': mid_layers,
-            'norm_kwargs': {},
-            'scale': 3.0,
-        },
-    )
-
-    for param in param_groups[-1]['params']:
-        if len(param.shape) != 2:
-            print(f"Warning: parameter {param.shape} in mid layers may not be compatible with {mid_layers} normalization")
-
-    last_params = chain(
-        model.transformer.ln_f.parameters(), # type: ignore
-        model.lm_head.parameters() # type: ignore
-    )
-    param_groups.append(
-        {
-            'params': last_params,
-            'norm': last_layer,
-            'norm_kwargs': {},
-            'scale': 10.0,
-        },
-    )
-    optimizer = optimizers.Scion(param_groups, lr=learning_rate, momentum=1-beta1, unconstrained=False)
+    optim_groups = [
+        {'params': model.transformer.wte.parameters(), # type: ignore
+            'norm': first_layer, 
+            'norm_kwargs': {'normalized': True}, 
+            'scale': 1.0,},
+    ]
+    optim_groups.append({
+        'params': model.transformer.h.parameters(), # type: ignore
+        'norm': mid_layer, 
+        'norm_kwargs': {}, 
+        'scale': 1.0,
+    })
+    optim_groups.append({
+        'params': model.lm_head.parameters(), 
+        'norm': last_layer, 
+        'norm_kwargs': {}, 
+        'scale': 10.0,
+    })    
+    optimizer = Scion(optim_groups, lr=learning_rate, momentum=1-beta1, unconstrained=False)
     optimizer.init()
 else:
     raise ValueError(f"Unknown optimizer_variant {optimizer_variant}")

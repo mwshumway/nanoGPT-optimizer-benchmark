@@ -1,4 +1,6 @@
 
+
+export PYTORCH_ENABLE_MPS_FALLBACK=1
 python3.10 train.py config/train_shakespeare_char.py \
 --optimizer_variant=scion \
 --device='mps' \
