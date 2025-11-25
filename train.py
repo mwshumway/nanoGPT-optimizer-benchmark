@@ -52,8 +52,10 @@ always_save_checkpoint = True # if True, always save a checkpoint after each eva
 init_from = 'scratch' # 'scratch' or 'resume' or 'gpt2*'
 # wandb logging
 wandb_log = False # disabled by default
+wandb_entity = 'nanogpt-optimizers' # wandb entity (team) here
 wandb_project = 'owt'
 wandb_run_name = 'gpt2' # 'run' + str(time.time())
+wandb_group_name = 'experiment'
 # data
 dataset = 'openwebtext'
 gradient_accumulation_steps = 5 * 8 # used to simulate larger batch sizes
@@ -184,7 +186,7 @@ elif init_from == 'resume':
     for k in ['n_layer', 'n_head', 'n_headgroup', 'n_embd', 'block_size', 'bias', 'vocab_size']:
         model_args[k] = checkpoint_model_args[k]
     # create the model
-    gptconf = GPTConfig(**model_args)
+    gptconf = GPTConfig(**model_args) # type: ignore
     model = GPT(gptconf)
     state_dict = checkpoint['model']
     # fix the keys of the state dictionary :(
@@ -219,7 +221,7 @@ print("optimizer_variant = ", optimizer_variant)
 if optimizer_variant == 'adamw':
     optimizer = model.configure_optimizers(weight_decay, learning_rate, (beta1, beta2), device_type)
 elif optimizer_variant == 'adam':
-    optimizer = optimizers.Adam(model.parameters(), learning_rate, betas=(beta1, beta2))
+    optimizer = optimizers.AdamW(model.parameters(), learning_rate, betas=(beta1, beta2))
 elif optimizer_variant == 'adafactor':
     # group parameters into linear module weight matrices and everything else
     linear_modules = [module.weight for module in model.modules() if isinstance(module, nn.Linear)]
@@ -248,7 +250,7 @@ elif optimizer_variant == 'muon':
     ]
     optimizer = optimizers.Muon(param_groups, learning_rate)
 elif optimizer_variant == "scion":
-    first_layer = 'ColNorm'
+    first_layer = 'Sign'
     mid_layer = 'Spectral'
     last_layer = 'Sign'
     optim_groups = [
@@ -322,7 +324,7 @@ def get_lr(it):
 # logging
 if wandb_log and master_process:
     import wandb
-    wandb.init(project=wandb_project, name=wandb_run_name, config=config)
+    wandb.init(entity=wandb_entity, project=wandb_project, name=wandb_run_name, config=config, group=wandb_group_name)
 
 # training loop
 X, Y = get_batch('train') # fetch the very first batch

@@ -1,6 +1,5 @@
-
 python3.10 train.py config/train_shakespeare_char.py \
---optimizer_variant=muon \
+--optimizer_variant=adamw \
 --device='mps' \
 --compile=False \
 --eval_iters=20 \
@@ -14,8 +13,5 @@ python3.10 train.py config/train_shakespeare_char.py \
 --lr_decay_iters=2000 \
 --dropout=0.0 \
 --wandb_log=True \
---wandb_group_name='muon' \
---wandb_run_name='muon-base' \
-
-
-# train loss 1.1326, val loss 1.5803
+--wandb_group_name='adamw' \
+--wandb_run_name='adamw-base'
