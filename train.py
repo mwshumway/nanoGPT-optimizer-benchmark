@@ -292,6 +292,28 @@ elif optimizer_variant == "scion":
     )
     optimizer = optimizers.Scion(param_groups, lr=learning_rate, momentum=1-beta1, unconstrained=False)
     optimizer.init()
+
+elif optimizer_variant == 'shampoo':
+    # group parameters into linear module weight matrices and everything else
+    linear_modules = [module.weight for module in model.modules() if isinstance(module, nn.Linear)]
+    regular_params = [p for p in model.parameters() if id(p) not in [id(p) for p in linear_modules]]
+    param_groups = [
+        {'params': regular_params, 'param_type': 'regular'},  # use regular updates
+        {'params': linear_modules, 'param_type': 'linear'}  # use Shampoo 
+    ]
+ 
+    optimizer = optimizers.Shampoo(param_groups, lr=learning_rate)
+
+elif optimizer_variant == 'full_matrix_adagrad':
+    from optimizers.full_matrix_adagrad import FullMatrixAdaGrad
+    linear_modules = [module.weight for module in model.modules() if isinstance(module, nn.Linear)]
+    regular_params = [p for p in model.parameters() if id(p) not in [id(p) for p in linear_modules]]
+    param_groups = [
+        {'params': regular_params, 'param_type': 'regular'},  # use regular updates
+        {'params': linear_modules, 'param_type': 'linear'}   # use full adagrad
+    ]
+    optimizer = FullMatrixAdaGrad(param_groups, lr=learning_rate)
+
 else:
     raise ValueError(f"Unknown optimizer_variant {optimizer_variant}")
 
