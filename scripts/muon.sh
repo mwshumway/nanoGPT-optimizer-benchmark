@@ -17,5 +17,3 @@ python3.10 train.py config/train_shakespeare_char.py \
 --wandb_group_name='muon' \
 --wandb_run_name='muon-base' \
 
-
-# train loss 1.1326, val loss 1.5803
