@@ -57,8 +57,8 @@ class Shampoo(Optimizer):
                 if g.dim() == 2:
                     if "L" not in state:
                         m, n = g.shape
-                        state["L"] = eps * torch.eye(m, dtype=torch.float32)
-                        state["R"] = eps * torch.eye(n, dtype=torch.float32)
+                        state["L"] = eps * torch.eye(m, dtype=torch.float32, device=g.device)
+                        state["R"] = eps * torch.eye(n, dtype=torch.float32, device=g.device)
 
                     L = state["L"]
                     R = state["R"]
@@ -81,7 +81,7 @@ class Shampoo(Optimizer):
                 # 1D case: AdaGrad
                 elif g.dim() == 1:
                     if "sum_sq" not in state:
-                        state["sum_sq"] = torch.zeros_like(g, dtype=torch.float32)
+                        state["sum_sq"] = torch.zeros_like(g, dtype=torch.float32, device=g.device)
 
                     state["sum_sq"].add_(g * g)
                     denom = state["sum_sq"].sqrt() + eps

@@ -221,7 +221,7 @@ print("optimizer_variant = ", optimizer_variant)
 if optimizer_variant == 'adamw':
     optimizer = model.configure_optimizers(weight_decay, learning_rate, (beta1, beta2), device_type)
 elif optimizer_variant == 'adam':
-    optimizer = optimizers.AdamW(model.parameters(), learning_rate, betas=(beta1, beta2))
+    optimizer = optimizers.Adam(model.parameters(), learning_rate, betas=(beta1, beta2))
 elif optimizer_variant == 'adafactor':
     # group parameters into linear module weight matrices and everything else
     linear_modules = [module.weight for module in model.modules() if isinstance(module, nn.Linear)]
@@ -368,9 +368,10 @@ while True:
         print(f"step {iter_num}: train loss {losses['train']:.4f}, val loss {losses['val']:.4f}")
         if wandb_log:
             wandb.log({
-                "iter": iter_num,
+                "iter": iter_num,      
                 "train/loss": losses['train'],
                 "val/loss": losses['val'],
+                'tokens': iter_num * tokens_per_iter,
                 "lr": lr,
                 "mfu": running_mfu*100, # convert to percentage
             })
@@ -406,10 +407,27 @@ while True:
         X, Y = get_batch('train')
         # backward pass, with gradient scaling if training in fp16
         scaler.scale(loss).backward()
+
+    # unscale before computing grad norm
+    if wandb_log and master_process:
+        scaler.unscale_(optimizer)
+
+        total_norm = 0.0
+        for p in model.parameters():
+            if p.grad is not None:
+                param_norm = p.grad.data.norm(2)
+                total_norm += param_norm.item() ** 2
+        total_norm = total_norm ** 0.5
+
+        wandb.log({
+            "iter": iter_num,
+            "grad_norm": total_norm,
+        })
+        
     # clip the gradient
     if grad_clip != 0.0:
-        scaler.unscale_(optimizer)
         torch.nn.utils.clip_grad_norm_(model.parameters(), grad_clip)
+
     # step the optimizer and scaler if training in fp16
     scaler.step(optimizer)
     scaler.update()

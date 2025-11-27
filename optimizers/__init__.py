@@ -1,5 +1,5 @@
 from .muon import Muon
-from .adamw import AdamW
+from .adam import Adam
 from .adamsn import AdamSN
 from .adafactor import Adafactor
 from .scion import Scion
@@ -8,7 +8,7 @@ from .full_matrix_adagrad import FullMatrixAdaGrad
 
 __all__ = [
     "Muon",
-    "AdamW",
+    "Adam",
     "AdamSN",
     "Adafactor",
     "Scion",
