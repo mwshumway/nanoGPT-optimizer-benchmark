@@ -9,7 +9,7 @@ from torch import nn
 from torch.optim import Optimizer
 
 
-class Adam(Optimizer):
+class AdamW(Optimizer):
     """
     Implements Adam algorithm
     Parameters:

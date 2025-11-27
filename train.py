@@ -52,8 +52,10 @@ always_save_checkpoint = True # if True, always save a checkpoint after each eva
 init_from = 'scratch' # 'scratch' or 'resume' or 'gpt2*'
 # wandb logging
 wandb_log = False # disabled by default
+wandb_entity = 'nanogpt-optimizers' # wandb entity (team) here
 wandb_project = 'owt'
 wandb_run_name = 'gpt2' # 'run' + str(time.time())
+wandb_group_name = 'experiment'
 # data
 dataset = 'openwebtext'
 gradient_accumulation_steps = 5 * 8 # used to simulate larger batch sizes
@@ -184,7 +186,7 @@ elif init_from == 'resume':
     for k in ['n_layer', 'n_head', 'n_headgroup', 'n_embd', 'block_size', 'bias', 'vocab_size']:
         model_args[k] = checkpoint_model_args[k]
     # create the model
-    gptconf = GPTConfig(**model_args)
+    gptconf = GPTConfig(**model_args) # type: ignore
     model = GPT(gptconf)
     state_dict = checkpoint['model']
     # fix the keys of the state dictionary :(
@@ -219,7 +221,7 @@ print("optimizer_variant = ", optimizer_variant)
 if optimizer_variant == 'adamw':
     optimizer = model.configure_optimizers(weight_decay, learning_rate, (beta1, beta2), device_type)
 elif optimizer_variant == 'adam':
-    optimizer = optimizers.Adam(model.parameters(), learning_rate, betas=(beta1, beta2))
+    optimizer = optimizers.AdamW(model.parameters(), learning_rate, betas=(beta1, beta2))
 elif optimizer_variant == 'adafactor':
     # group parameters into linear module weight matrices and everything else
     linear_modules = [module.weight for module in model.modules() if isinstance(module, nn.Linear)]
@@ -248,49 +250,28 @@ elif optimizer_variant == 'muon':
     ]
     optimizer = optimizers.Muon(param_groups, learning_rate)
 elif optimizer_variant == "scion":
-    first_layer = 'ColNorm'
-    mid_layers = 'Spectral'
+    first_layer = 'Sign'
+    mid_layer = 'Spectral'
     last_layer = 'Sign'
-    param_groups = []
-    from itertools import chain
-    first_params = chain(
-        model.transformer.wte.parameters(), # type: ignore
-        model.transformer.wpe.parameters() # type: ignore
-    )
-    param_groups.append(
-        {
-            'params': first_params,
-            'norm': first_layer,
-            'norm_kwargs': {'normalized': False},
-            'scale': 1.0,
-        },
-    )
-    param_groups.append(
-        {
-            'params': model.transformer.h.parameters(), # type: ignore
-            'norm': mid_layers,
-            'norm_kwargs': {},
-            'scale': 3.0,
-        },
-    )
-
-    for param in param_groups[-1]['params']:
-        if len(param.shape) != 2:
-            print(f"Warning: parameter {param.shape} in mid layers may not be compatible with {mid_layers} normalization")
-
-    last_params = chain(
-        model.transformer.ln_f.parameters(), # type: ignore
-        model.lm_head.parameters() # type: ignore
-    )
-    param_groups.append(
-        {
-            'params': last_params,
-            'norm': last_layer,
-            'norm_kwargs': {},
-            'scale': 10.0,
-        },
-    )
-    optimizer = optimizers.Scion(param_groups, lr=learning_rate, momentum=1-beta1, unconstrained=False)
+    optim_groups = [
+        {'params': model.transformer.wte.parameters(), # type: ignore
+            'norm': first_layer, 
+            'norm_kwargs': {'normalized': True}, 
+            'scale': 1.0,},
+    ]
+    optim_groups.append({
+        'params': model.transformer.h.parameters(), # type: ignore
+        'norm': mid_layer, 
+        'norm_kwargs': {}, 
+        'scale': 1.0,
+    })
+    optim_groups.append({
+        'params': model.lm_head.parameters(), 
+        'norm': last_layer, 
+        'norm_kwargs': {}, 
+        'scale': 10.0,
+    })    
+    optimizer = Scion(optim_groups, lr=learning_rate, momentum=1-beta1, unconstrained=False)
     optimizer.init()
 
 elif optimizer_variant == 'shampoo':
@@ -365,7 +346,7 @@ def get_lr(it):
 # logging
 if wandb_log and master_process:
     import wandb
-    wandb.init(project=wandb_project, name=wandb_run_name, config=config)
+    wandb.init(entity=wandb_entity, project=wandb_project, name=wandb_run_name, config=config, group=wandb_group_name)
 
 # training loop
 X, Y = get_batch('train') # fetch the very first batch
