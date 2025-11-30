@@ -1,14 +1,14 @@
-python3.10 train.py config/train_shakespeare_char.py \
+python train.py config/train_shakespeare_char.py \
 --optimizer_variant=muon \
 --device='cuda' \
 --compile=True \
 --eval_iters=20 \
 --log_interval=1 \
---block_size=64 \
---batch_size=64 \
---n_layer=32 \
---n_head=32 \
---n_embd=2048 \
+--batch_size=128 \
+--block_size=512 \
+--n_layer=12 \
+--n_head=12 \
+--n_embd=768 \
 --max_iters=2000 \
 --lr_decay_iters=2000 \
 --dropout=0.0 \
@@ -16,4 +16,7 @@ python3.10 train.py config/train_shakespeare_char.py \
 --wandb_group_name='muon' \
 --wandb_run_name='muon-lr0.02' \
 --lr_finder=False \
---learning_rate=2e-2 \
+--learning_rate=2e-3 \
+--min_lr=2e-4 \
+--wandb_project='shakespeare-char-large' \
+--eval_interval=100 \
