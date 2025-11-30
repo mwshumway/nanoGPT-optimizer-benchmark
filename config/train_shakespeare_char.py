@@ -37,3 +37,5 @@ weight_decay = 1e-1 # strength of weight decay regularization
 # on macbook also add
 # device = 'cpu'  # run on cpu only
 # compile = False # do not torch compile the model
+
+lr_finder = False

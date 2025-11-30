@@ -92,6 +92,8 @@ attention_variant = 'mha' # options: mha (multi-head attention implemented in na
 n_headgroup = 1 # number of heads per group if using grouped-query attention
 optimizer_variant = 'adamw' # options: adamw (optimizer used in nanoGPT), adam (implemented in optimizers.py), adafactor, adamsn
 # -----------------------------------------------------------------------------
+lr_finder = False
+# -----------------------------------------------------------------------------
 config_keys = [k for k,v in globals().items() if not k.startswith('_') and isinstance(v, (int, float, bool, str))]
 exec(open('configurator.py').read()) # overrides from command line or config file
 config = {k: globals()[k] for k in config_keys} # will be useful for logging
@@ -313,6 +315,89 @@ if compile:
 if ddp:
     model = DDP(model, device_ids=[ddp_local_rank])
 
+# logging
+if wandb_log and master_process:
+    import wandb
+    wandb.init(entity=wandb_entity, project=wandb_project, name=wandb_run_name, config=config, group=wandb_group_name)
+
+# -----------------------------------------------------------------------------
+# Learning Rate Finder
+# -----------------------------------------------------------------------------
+if lr_finder:
+    print("Running Learning Rate Finder...")
+    lr_start = 1e-7
+    lr_end = learning_rate
+    num_steps = 1000
+
+    for g in optimizer.param_groups:
+        g['lr'] = lr_start
+    
+    log_lrs = []
+    log_losses = []
+
+    model.train()
+
+    lr_mult = (lr_end / lr_start) ** (1 / num_steps)
+    lr = lr_start
+    best_loss = float('inf')
+    smoothing = 0.05
+    avg_loss = 0.0
+
+    for i in range(num_steps):
+        x, y = get_batch('train')
+
+        with ctx:
+            logits, loss = model(x, y)
+        
+        optimizer.zero_grad()
+
+        if scaler.is_enabled():
+            scaler.scale(loss).backward()
+            scaler.step(optimizer)
+            scaler.update()
+        else:
+            loss.backward()
+            optimizer.step()
+        
+        # smooth the loss
+        loss_item = loss.item()
+        if i == 0:
+            avg_loss = loss_item
+        else:
+            avg_loss = smoothing * loss_item + (1 - smoothing) * avg_loss
+        
+        # Track
+        log_lrs.append(lr)
+        log_losses.append(avg_loss)
+
+        if avg_loss > 10 * best_loss:
+            print("Stopping early, loss diverged")
+            break
+        
+        print(f"Step {i+1}/{num_steps}, LR: {lr:.6f}, Loss: {avg_loss:.4f}")
+
+        best_loss = min(best_loss, avg_loss)
+
+        # Update LR
+        lr *= lr_mult
+        for g in optimizer.param_groups:
+            g['lr'] = lr
+
+    if master_process and wandb_log:
+        table = wandb.Table(columns=["lr", "loss"])
+        for lr_, loss_ in zip(log_lrs, log_losses):
+            wandb.log({
+                "lr_finder/lr": lr_,
+                "lr_finder/loss": loss_
+            })
+            table.add_data(lr_, loss_)
+
+        wandb.log({"lr_finder/table": table})
+
+    exit()
+# -----------------------------------------------------------------------------
+    
+
 # helps estimate an arbitrarily accurate loss over either split using many batches
 @torch.no_grad()
 def estimate_loss():
@@ -342,11 +427,6 @@ def get_lr(it):
     assert 0 <= decay_ratio <= 1
     coeff = 0.5 * (1.0 + math.cos(math.pi * decay_ratio)) # coeff ranges 0..1
     return min_lr + coeff * (learning_rate - min_lr)
-
-# logging
-if wandb_log and master_process:
-    import wandb
-    wandb.init(entity=wandb_entity, project=wandb_project, name=wandb_run_name, config=config, group=wandb_group_name)
 
 # training loop
 X, Y = get_batch('train') # fetch the very first batch
