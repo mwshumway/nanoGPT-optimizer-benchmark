@@ -1,5 +1,5 @@
 python train.py config/train_shakespeare_char.py \
---optimizer_variant=muon \
+--optimizer_variant=shampoo \
 --device='cuda' \
 --compile=True \
 --eval_iters=20 \
@@ -13,10 +13,10 @@ python train.py config/train_shakespeare_char.py \
 --lr_decay_iters=2000 \
 --dropout=0.0 \
 --wandb_log=True \
---wandb_group_name='muon' \
---wandb_run_name='muon-lr0.005-0.0005' \
+--wandb_group_name='shampoo' \
+--wandb_run_name='shampoo-lr0.1-0.01' \
 --wandb_project="shakespeare-char-small" \
 --eval_interval=100 \
 --lr_finder=False \
---learning_rate=0.005 \
---min_lr=0.0005 \
+--learning_rate=0.1 \
+--min_lr=0.01 \

@@ -18,6 +18,3 @@ python3.10 train.py config/train_shakespeare_char.py \
 --wandb_log=True \
 --wandb_group_name='shampoo' \
 --wandb_run_name='shampoo-base'
-
-
-# loss 1.3168, val loss 1.5855

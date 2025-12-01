@@ -1,5 +1,5 @@
 python train.py config/train_shakespeare_char.py \
---optimizer_variant=muon \
+--optimizer_variant=scion \
 --device='cuda' \
 --compile=True \
 --eval_iters=20 \
@@ -13,10 +13,10 @@ python train.py config/train_shakespeare_char.py \
 --lr_decay_iters=2000 \
 --dropout=0.0 \
 --wandb_log=True \
---wandb_group_name='muon' \
---wandb_run_name='muon-lr0.005-0.0005' \
+--wandb_group_name='scion' \
+--wandb_run_name='scion-lr0.05-0.005' \
 --wandb_project="shakespeare-char-small" \
 --eval_interval=100 \
 --lr_finder=False \
---learning_rate=0.005 \
---min_lr=0.0005 \
+--learning_rate=0.05 \
+--min_lr=0.005 \

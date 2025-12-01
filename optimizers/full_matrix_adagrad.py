@@ -131,29 +131,40 @@ class FullMatrixAdaGrad(Optimizer):
                 p_flat = p.data.view(-1)
                 state = self.state[p]
 
+                # Initialize state: allocate G and G_inv_sqrt on CPU explicitly
                 if "step" not in state:
                     state["step"] = 0
-                    state["G"] = torch.zeros(d, d, device=p.device, dtype=torch.float32)
-                    state["G_inv_sqrt"] = torch.eye(d, device=p.device, dtype=torch.float32)
+                    # Keep G and G_inv_sqrt on CPU to avoid GPU OOM
+                    state["G"] = torch.zeros(d, d, device="cpu", dtype=torch.float32)
+                    state["G_inv_sqrt"] = torch.eye(d, device="cpu", dtype=torch.float32)
 
                 state["step"] += 1
                 step = state["step"]
-                G = state["G"]
-                #print(G.shape)
-                G_inv_sqrt = state["G_inv_sqrt"]
+                G = state["G"]  # CPU tensor
+                G_inv_sqrt = state["G_inv_sqrt"]  # CPU tensor
 
-                g_flat_f32 = g_flat.to(torch.float32)
-                G.add_(torch.outer(g_flat_f32, g_flat_f32))
+                # Move gradient to CPU (float32) for accumulation / eigendecomp
+                # Doing a single CPU<->GPU round-trip per parameter per step.
+                g_flat_f32_cpu = g_flat.to(dtype=torch.float32, device="cpu")
 
+                # Update CPU-side second moment
+                # G <- G + g g^T (on CPU)
+                G.add_(torch.outer(g_flat_f32_cpu, g_flat_f32_cpu))
+
+                # Recompute inverse sqrt on CPU occasionally
                 if step % precond_update_interval == 0:
-                    mat = G + eps * torch.eye(d, device=G.device, dtype=G.dtype)
+                    mat = G + eps * torch.eye(d, device="cpu", dtype=G.dtype)
+                    # compute inverse sqrt on CPU
                     G_inv_sqrt = _symmetric_matrix_power(mat, power=-0.5, eps=eps)
                     state["G_inv_sqrt"] = G_inv_sqrt
-                
-                precond_grad_f32 = G_inv_sqrt @ g_flat_f32
-                
-                precond_grad = precond_grad_f32.to(dtype=p_flat.dtype, device=p_flat.device)
 
+                # Precondition gradient on CPU
+                precond_grad_f32_cpu = G_inv_sqrt @ g_flat_f32_cpu  # CPU
+
+                # Move preconditioned gradient back to parameter device and original dtype
+                precond_grad = precond_grad_f32_cpu.to(dtype=p_flat.dtype, device=p_flat.device)
+
+                # Update parameter in-place on its device
                 p_flat.add_(precond_grad, alpha=-lr)
 
         return loss
