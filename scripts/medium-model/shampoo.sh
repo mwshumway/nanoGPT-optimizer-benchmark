@@ -1,9 +1,6 @@
-
-
-export PYTORCH_ENABLE_MPS_FALLBACK=1
-python3.10 train.py config/train_shakespeare_char.py \
+python train.py config/train_shakespeare_char.py \
 --optimizer_variant=shampoo \
---device='mps' \
+--device='cuda' \
 --compile=False \
 --eval_iters=20 \
 --log_interval=1 \
@@ -17,4 +14,9 @@ python3.10 train.py config/train_shakespeare_char.py \
 --dropout=0.0 \
 --wandb_log=True \
 --wandb_group_name='shampoo' \
---wandb_run_name='shampoo-base'
+--wandb_run_name='shampoo-lr0.5-0.05' \
+--wandb_project="shakespeare-char-medium" \
+--eval_interval=100 \
+--lr_finder=False \
+--learning_rate=0.5 \
+--min_lr=0.05 \

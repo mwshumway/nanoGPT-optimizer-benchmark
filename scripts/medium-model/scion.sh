@@ -1,9 +1,6 @@
-
-
-export PYTORCH_ENABLE_MPS_FALLBACK=1
-python3.10 train.py config/train_shakespeare_char.py \
+python train.py config/train_shakespeare_char.py \
 --optimizer_variant=scion \
---device='mps' \
+--device='cuda' \
 --compile=False \
 --eval_iters=20 \
 --log_interval=1 \
@@ -17,7 +14,9 @@ python3.10 train.py config/train_shakespeare_char.py \
 --dropout=0.0 \
 --wandb_log=True \
 --wandb_group_name='scion' \
---wandb_run_name='scion-sign-spectral-sign'
-
-
-# loss 1.3168, val loss 1.5855
+--wandb_run_name='scion-lr0.01-0.001' \
+--wandb_project="shakespeare-char-medium" \
+--eval_interval=100 \
+--lr_finder=False \
+--learning_rate=0.01 \
+--min_lr=0.001 \

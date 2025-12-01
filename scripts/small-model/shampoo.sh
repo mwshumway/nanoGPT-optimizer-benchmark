@@ -1,7 +1,7 @@
-python train.py config/train_shakespeare_char.py \
+python3.10 train.py config/train_shakespeare_char.py \
 --optimizer_variant=shampoo \
---device='cuda' \
---compile=True \
+--device='cpu' \
+--compile=False \
 --eval_iters=20 \
 --log_interval=1 \
 --block_size=32 \
@@ -14,7 +14,7 @@ python train.py config/train_shakespeare_char.py \
 --dropout=0.0 \
 --wandb_log=True \
 --wandb_group_name='shampoo' \
---wandb_run_name='shampoo-lr0.1-0.01' \
+--wandb_run_name='shampoo-lr0.5-0.05-cpu' \
 --wandb_project="shakespeare-char-small" \
 --eval_interval=100 \
 --lr_finder=False \

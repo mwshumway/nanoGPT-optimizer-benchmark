@@ -1,21 +1,21 @@
-python3.10 train.py config/train_shakespeare_char.py \
+python train.py config/train_shakespeare_char.py \
 --optimizer_variant=adam \
---device='cpu' \
+--device='cuda' \
 --compile=False \
 --eval_iters=20 \
 --log_interval=1 \
---block_size=32 \
---batch_size=32 \
---n_layer=4 \
---n_head=4 \
---n_embd=32 \
+--block_size=64 \
+--batch_size=64 \
+--n_layer=8 \
+--n_head=8 \
+--n_embd=256 \
 --max_iters=2000 \
 --lr_decay_iters=2000 \
 --dropout=0.0 \
 --wandb_log=True \
 --wandb_group_name='adamw' \
---wandb_run_name='adam-lr0.005-0.0005-cpu' \
---wandb_project="shakespeare-char-small" \
+--wandb_run_name='adam-lr0.005-0.0005' \
+--wandb_project="shakespeare-char-medium" \
 --eval_interval=100 \
 --lr_finder=False \
 --learning_rate=0.005 \

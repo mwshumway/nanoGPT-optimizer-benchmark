@@ -1,7 +1,6 @@
-
-python3.10 train.py config/train_shakespeare_char.py \
+python train.py config/train_shakespeare_char.py \
 --optimizer_variant=muon \
---device='mps' \
+--device='cuda' \
 --compile=False \
 --eval_iters=20 \
 --log_interval=1 \
@@ -16,8 +15,8 @@ python3.10 train.py config/train_shakespeare_char.py \
 --wandb_log=True \
 --wandb_group_name='muon' \
 --wandb_run_name='muon-lr0.01' \
+--wand_project="shakespeare-char-medium" \
+--eval_interval=100 \
 --lr_finder=False \
 --learning_rate=0.01 \
-
-
-# train loss 1.1326, val loss 1.5803
+--min_lr=0.001 \
