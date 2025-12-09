@@ -14,9 +14,9 @@ python3.10 train.py config/train_shakespeare_char.py \
 --dropout=0.0 \
 --wandb_log=True \
 --wandb_group_name='scion' \
---wandb_run_name='scion-lr0.05-0.005-cpu' \
+--wandb_run_name='scion-lr-0.00036' \
 --wandb_project="shakespeare-char-small" \
 --eval_interval=100 \
 --lr_finder=False \
---learning_rate=0.05 \
---min_lr=0.005 \
+--learning_rate=0.0036 \
+--min_lr=0.00036 \
